@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "restoration"
+version = "0.1.0"
+description = "Restoring historical photographs with fine-tuned generative AI models (AAI-521 Group 3)."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Nolan Robbins" },
+    { name = "Sean McGowan" },
+    { name = "Jackson Kenyon" },
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311"]
+extend-exclude = "src/restoration/models/third_party"
+
+[tool.isort]
+profile = "black"
+line_length = 100
+src_paths = ["src", "tests", "scripts"]
+skip_glob = ["src/restoration/models/third_party/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["src/restoration/models/third_party"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "N", "SIM"]
+# N812: `import torch.nn.functional as F` is the PyTorch convention.
+ignore = ["N812"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+exclude = ["src/restoration/models/third_party/"]
+
+[[tool.mypy.overrides]]
+module = "restoration.models.third_party.*"
+ignore_errors = true
+follow_imports = "skip"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "network: test hits a live external service (deselect with -m 'not network')",
+    "gpu: test requires a CUDA device",
+]

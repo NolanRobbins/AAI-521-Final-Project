@@ -1,0 +1,65 @@
+# Data acquisition and preparation config.
+# Paths are relative to $AAI521_DATA_ROOT (see .env.example).
+seed: 521
+
+sources:
+  # Primary training corpus: ~1,623 Kodachrome slides/negatives, 1939-1944.
+  loc_fsa_color:
+    collection: fsa-owi-color-photographs
+    max_side: 2048          # IIIF server-side resize of the master TIFF (native ~4-5k px)
+    limit: null             # null = whole collection
+    requests_per_second: 2.0
+    workers: 4
+
+  # Real-damage evaluation pool (no ground truth). We pull a seeded random candidate
+  # pool; the team hand-picks the final set into configs/loc_bw_handpicked.txt.
+  loc_fsa_bw:
+    collection: fsa-owi-black-and-white-negatives
+    max_side: 2048
+    limit: 300
+    requests_per_second: 2.0
+    workers: 4
+
+  # Additional training corpus: EPA DOCUMERICA 1972-1977, public domain. Mirrored from
+  # NARA to Wikimedia Commons (no API key needed, unlike Flickr). Each NARA id appears as
+  # both .jpg and .tif on Commons; we dedupe on the NARA id.
+  documerica:
+    category: >-
+      Category:US National Archives series: DOCUMERICA: The Environmental Protection
+      Agency's Program to Photographically Document Subjects of Environmental Concern,
+      compiled 1972 - 1977
+    max_side: 1920          # Wikimedia serves standard thumbnail widths; 1920 is one of them
+    limit: 6400
+    requests_per_second: 4.0
+    workers: 4
+
+  # 12,000 irregular hole masks (Liu et al., ECCV 2018) in six hole-ratio bins.
+  nvidia_masks:
+    url: https://www.dropbox.com/s/01dfayns9s0kevy/test_mask.zip?dl=1
+
+  # Modern-photo sanity check (NTIRE 2017 validation HR, 100 images).
+  div2k_valid:
+    url: https://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_valid_HR.zip
+
+  # RealOld (Pik-Fix, WACV 2023): available from the authors on request. Place the
+  # received files under $AAI521_DATA_ROOT/raw/realold/ -- no automated download.
+
+# Curation filters applied to training sources before splitting. Thresholds on
+# sharpness/noise are percentiles computed per source, so each archive is judged
+# against its own scanning characteristics.
+curation:
+  train_sources: [loc_fsa_color, documerica]
+  min_side: 1024                 # after download-time downscaling
+  min_colorfulness: 8.0          # drop near-greyscale scans from colour sources
+  sharpness_min_percentile: 5    # drop the blurriest 5% per source
+  noise_max_percentile: 95       # drop the noisiest 5% per source
+  max_border_fraction: 0.25      # drop if borders would remove >25% of either side
+
+splits:
+  val_fraction: 0.10
+  test_fraction: 0.10
+  phash_hamming_threshold: 8   # images within this pHash distance share a split group
+
+patches:
+  size: 512
+  sr_scale: 4
