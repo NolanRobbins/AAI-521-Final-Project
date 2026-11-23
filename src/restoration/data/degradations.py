@@ -169,6 +169,40 @@ def fade(img: FloatImage, amount: float, tint: tuple[float, float, float]) -> Fl
     return np.asarray(np.clip(out, 0, 1), dtype=np.float32)
 
 
+def correct_fading(
+    img: FloatImage, strength: float = 0.7, chroma_gain: float = 1.15, clip: Range = (1.0, 99.0)
+) -> FloatImage:
+    """Partially undo dye fading to make better colorization *targets*.
+
+    EDA showed both archives' colours are faded: FSA/OWI Kodachromes are warm and
+    desaturated, DOCUMERICA Ektachromes carry magenta casts (cyan-dye loss). Training a
+    colorizer on those targets would teach it to paint faded casts. In CIELAB we
+
+    1. stretch L between its ``clip`` percentiles (restores contrast lost to fading),
+    2. shift a/b toward neutral by ``strength`` x their medians (grey-world, tempered so
+       scenes that are genuinely dominated by one colour keep most of it),
+    3. scale chroma by ``chroma_gain`` (compensates saturation loss).
+
+    Args:
+        img: RGB image in ``[0, 1]``.
+        strength: Fraction of the median a/b cast removed (0 = none, 1 = full grey-world).
+        chroma_gain: Multiplier on a/b after cast removal.
+        clip: Lower/upper percentiles of L mapped to 0 and 100.
+
+    Returns:
+        Corrected RGB image.
+    """
+    _check(img)
+    lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
+    lo, hi = np.percentile(lab[..., 0], clip)
+    if hi - lo > 1e-3:
+        lab[..., 0] = np.clip((lab[..., 0] - lo) / (hi - lo) * 100.0, 0, 100)
+    for ch in (1, 2):
+        lab[..., ch] = (lab[..., ch] - strength * np.median(lab[..., ch])) * chroma_gain
+    rgb = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+    return np.asarray(np.clip(rgb, 0, 1), dtype=np.float32)
+
+
 # --------------------------------------------------------------------------- damage masks
 
 
@@ -185,7 +219,12 @@ class DamageConfig:
 
 
 def _random_walk(
-    rng: np.random.Generator, start: NDArray[np.float64], heading: float, steps: int, step_len: float, wobble: float
+    rng: np.random.Generator,
+    start: NDArray[np.float64],
+    heading: float,
+    steps: int,
+    step_len: float,
+    wobble: float,
 ) -> NDArray[np.int32]:
     points = [start]
     for _ in range(steps):
@@ -194,7 +233,9 @@ def _random_walk(
     return np.round(np.array(points)).astype(np.int32)
 
 
-def random_damage_mask(h: int, w: int, rng: np.random.Generator, cfg: DamageConfig = DamageConfig()) -> BoolMask:
+def random_damage_mask(
+    h: int, w: int, rng: np.random.Generator, cfg: DamageConfig = DamageConfig()
+) -> BoolMask:
     """Procedural mask of scratches, branching cracks and blotches (True = damaged).
 
     Scratches are long, near-vertical strokes (film transport scratches); cracks are
@@ -216,7 +257,9 @@ def random_damage_mask(h: int, w: int, rng: np.random.Generator, cfg: DamageConf
     for _ in range(int(rng.integers(cfg.n_scratches[0], cfg.n_scratches[1] + 1))):
         start = np.array([rng.uniform(0, w), rng.uniform(-0.1 * h, 0.3 * h)])
         heading = np.pi / 2 + rng.normal(0, 0.15)
-        pts = _random_walk(rng, start, heading, steps=40, step_len=h / 40 * rng.uniform(0.5, 1.2), wobble=0.03)
+        pts = _random_walk(
+            rng, start, heading, steps=40, step_len=h / 40 * rng.uniform(0.5, 1.2), wobble=0.03
+        )
         thickness = int(rng.integers(cfg.scratch_width[0], cfg.scratch_width[1] + 1))
         cv2.polylines(mask, [pts.reshape(-1, 1, 2)], False, 1, thickness, lineType=cv2.LINE_AA)
 
@@ -226,7 +269,12 @@ def random_damage_mask(h: int, w: int, rng: np.random.Generator, cfg: DamageConf
         cv2.polylines(mask, [trunk.reshape(-1, 1, 2)], False, 1, 1, lineType=cv2.LINE_AA)
         for idx in rng.choice(len(trunk), size=min(3, len(trunk)), replace=False):
             branch = _random_walk(
-                rng, trunk[idx].astype(np.float64), rng.uniform(0, 2 * np.pi), 12, diag / 150, wobble=0.4
+                rng,
+                trunk[idx].astype(np.float64),
+                rng.uniform(0, 2 * np.pi),
+                12,
+                diag / 150,
+                wobble=0.4,
             )
             cv2.polylines(mask, [branch.reshape(-1, 1, 2)], False, 1, 1, lineType=cv2.LINE_AA)
 
@@ -287,7 +335,9 @@ class Pair:
     mask: BoolMask | None = None
 
 
-def make_denoise_pair(clean: FloatImage, rng: np.random.Generator, cfg: DenoiseConfig = DenoiseConfig()) -> Pair:
+def make_denoise_pair(
+    clean: FloatImage, rng: np.random.Generator, cfg: DenoiseConfig = DenoiseConfig()
+) -> Pair:
     """Grain + Gaussian noise (+ optional JPEG) on a clean image."""
     _check(clean)
     x = add_film_grain(clean, _uniform(rng, cfg.grain_strength), _uniform(rng, cfg.grain_size), rng)
@@ -336,7 +386,9 @@ def make_inpaint_pair(
     if external_mask is None:
         mask = random_damage_mask(h, w, rng, cfg)
     else:
-        resized = cv2.resize(external_mask.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST)
+        resized = cv2.resize(
+            external_mask.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST
+        )
         mask = resized.astype(bool)
     return Pair(inp=apply_damage(clean, mask, rng), target=clean, mask=mask)
 

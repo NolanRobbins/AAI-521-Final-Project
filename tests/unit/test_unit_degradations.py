@@ -122,3 +122,18 @@ def test_fade_reduces_contrast(clean: deg.FloatImage) -> None:
     faded = deg.fade(clean, 0.8, (0.8, 0.7, 0.5))
     _assert_valid(faded, clean.shape)
     assert faded.std() < clean.std()
+
+
+def test_correct_fading_removes_cast_and_restores_contrast() -> None:
+    rng = np.random.default_rng(0)
+    base = rng.random((64, 64, 3), dtype=np.float32)
+    faded = deg.fade(base, 0.8, (0.85, 0.55, 0.75))  # low contrast + magenta cast
+    fixed = deg.correct_fading(faded, strength=1.0, chroma_gain=1.0)
+    lab_faded = deg.cv2.cvtColor(faded, deg.cv2.COLOR_RGB2LAB)
+    lab_fixed = deg.cv2.cvtColor(fixed, deg.cv2.COLOR_RGB2LAB)
+    assert (
+        np.abs(np.median(lab_fixed[..., 1:], axis=(0, 1))).max()
+        < 0.5 * np.abs(np.median(lab_faded[..., 1:], axis=(0, 1))).max()
+    )
+    assert lab_fixed[..., 0].std() > lab_faded[..., 0].std()
+    assert fixed.dtype == np.float32 and fixed.min() >= 0 and fixed.max() <= 1

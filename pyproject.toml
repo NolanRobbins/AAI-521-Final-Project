@@ -44,6 +44,12 @@ strict = true
 ignore_missing_imports = true
 exclude = ["src/restoration/models/third_party/"]
 
+# diffusers ships without type hints for most constructors/from_pretrained; keep strict
+# checking everywhere else but allow calling its untyped API from the LoRA trainer.
+[[tool.mypy.overrides]]
+module = "restoration.training.sd_inpaint"
+disallow_untyped_calls = false
+
 [[tool.mypy.overrides]]
 module = "restoration.models.third_party.*"
 ignore_errors = true

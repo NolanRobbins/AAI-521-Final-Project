@@ -1,0 +1,15 @@
+# Swin2SR x4 fine-tuned on blur -> bicubic downsample -> noise (-> JPEG) degradations.
+task: super_resolution
+model_key: super_resolution
+run_name: sr_swin2sr_x4
+patch_size: 256          # HR patch; LR input is 64x64 (= Swin2SR's pretraining size)
+batch_size: 8            # 11.5 GiB peak
+num_workers: 4
+lr: 2.0e-5
+weight_decay: 1.0e-4
+max_steps: 6000
+warmup_steps: 200
+val_every: 500
+val_limit: 128
+pixel_loss: l1
+select_metric: psnr

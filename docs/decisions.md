@@ -89,3 +89,58 @@ pHash ≤ 8 + caption rule is not over-merging.
 | train | 1,146 | 4,375 | 5,521 |
 | val | 132 | 557 | 689 |
 | test | 132 | 557 | 689 |
+
+## D8 — Fine-tuning design (2026-11-23)
+
+* **One trainer, per-task adapters** (`restoration.training`). Degraded/clean pairs are
+  synthesised on the fly, so every epoch sees new damage; validation pairs are seeded by
+  index and fixed. The trainer validates at **step 0**, so each run records the classical
+  baseline, the zero-shot model and the fine-tuned model on identical data.
+* **Transfer-learning strategy.** SCUNet, Swin2SR and DDColor are fully fine-tuned at a
+  low LR (1–2e-5, cosine schedule with warm-up) to adapt rather than overwrite their
+  priors. SD 1.5 inpainting uses **LoRA** (r = 16 on attention projections; 3.2M of 860M
+  parameters, LR 1e-4).
+* **Losses.** Charbonnier for denoising; L1 for SR; L1 + 0.5·LPIPS + 0.5·colourfulness-gap
+  for colorization (L1 alone regresses toward desaturated means); the standard
+  ε-prediction MSE for diffusion. For diffusion, the mask is downsampled to latent
+  resolution with **max-pooling** so thin scratches survive.
+* **Resumable, pickle-free artefacts.** `best.safetensors` / diffusers LoRA plus
+  `last_state.pt` and `metrics.csv`. A disconnected Colab session resumes by rerunning
+  the same command.
+* **Memory on 16 GB (bf16)**, measured peaks: SCUNet bs 4 = 7.8 GiB, Swin2SR bs 8 =
+  11.5 GiB, DDColor-L bs 2 = 7.8 GiB, SD-LoRA bs 2 + gradient checkpointing ≈ 5 GiB.
+  Gradient accumulation keeps the effective batch at 8 (4 for SD). The process is
+  capped at 95 % of VRAM because the Windows driver otherwise silently spills into
+  system RAM (≈ 10× slower) instead of raising OOM.
+
+Smoke runs (64 train / 16 val images, 150 steps; val PSNR in dB):
+
+| Task | Classical baseline | Zero-shot | 150 steps |
+|---|---|---|---|
+| Denoise (SCUNet) | 26.45 (noisy input) | 33.84 | 35.45 |
+| Super-res ×4 (Swin2SR) | 31.87 (bicubic) | 31.44 | 34.01 |
+| Colorize (DDColor-L, faded targets) | 19.64 (grey) | 20.85 | 25.28 (LPIPS 0.225 → 0.126) |
+
+## D9 — EDA-driven data revisions
+
+* **Border rule relaxed (25 % → 45 %).** The border detector also fires on dark, low-key
+  scenes; dropping them biased the corpus toward daylight. Borders are cropped at load
+  time anyway. This recovered 360 images: 7,163 kept → 5,731 / 716 / 716.
+* **Dye fading.** FSA/OWI Kodachromes are warm and desaturated (median colourfulness ≈ 27
+  vs 43 for DIV2K); many DOCUMERICA Ektachromes have magenta casts. Colorization targets
+  get a tempered grey-world + L-stretch + 15 % chroma correction
+  (`degradations.correct_fading`), so the model does not learn to paint fading. This is
+  evaluated as an ablation.
+* **The noise estimator responds to texture** (DIV2K scores the "noisiest"), so curation
+  uses per-source percentiles, not absolute thresholds.
+
+## D10 — SD inpainting composite fix
+
+Pasting the whole generation-dilated band back damaged intact context. On 12 val images
+(zero-shot), pasting only the true hole (+1 px, 2 px feather) with 3 px latent dilation
+improved PSNR 28.24 → 30.76 and SSIM 0.886 → 0.915.
+
+OpenCV Telea still scores higher on pixel metrics (PSNR 33.9, hole-PSNR 23.1 vs 20.7).
+That is expected: smooth interpolation is mean-seeking, which PSNR rewards on thin
+scratches. Inpainting is therefore evaluated **per hole-size bin** and with LPIPS, where
+generative fill should win on large holes.

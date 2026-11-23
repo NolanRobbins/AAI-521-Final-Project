@@ -15,7 +15,6 @@ import logging
 import random
 import re
 from collections.abc import Iterator, Sequence
-from typing import Any
 
 import requests
 
@@ -137,7 +136,10 @@ def resolve_records(
             if not info_list:
                 continue
             info = info_list[0]
-            meta = {k: clean_metadata(v.get("value", "")) for k, v in info.get("extmetadata", {}).items()}
+            meta = {
+                k: clean_metadata(v.get("value", ""))
+                for k, v in info.get("extmetadata", {}).items()
+            }
             ident = id_by_title.get(page["title"])
             if ident is None:
                 continue
@@ -155,7 +157,10 @@ def resolve_records(
                     license=meta.get("LicenseShortName", "Public domain"),
                     group_hint=ident,
                     page_url=str(info.get("descriptionurl", "")),
-                    extra={"commons_title": page["title"], "original_mime": str(info.get("mime", ""))},
+                    extra={
+                        "commons_title": page["title"],
+                        "original_mime": str(info.get("mime", "")),
+                    },
                 )
             )
     return records

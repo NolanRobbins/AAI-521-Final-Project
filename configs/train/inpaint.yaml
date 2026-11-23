@@ -1,0 +1,19 @@
+# Stable Diffusion 1.5 Inpainting + LoRA on scratch/crack/blotch and NVIDIA masks.
+task: inpaint
+model_key: inpaint
+run_name: inpaint_sd15_lora
+patch_size: 512          # SD 1.5 native resolution
+batch_size: 2
+grad_accum: 2            # effective batch 4
+num_workers: 4
+lr: 1.0e-4               # LoRA tolerates (and needs) a higher LR than full fine-tuning
+lora_rank: 16
+lora_alpha: 16
+max_steps: 3000
+warmup_steps: 100
+val_every: 500
+val_limit: 16            # each val image runs a 20-step diffusion sample
+val_inference_steps: 20
+caption_dropout: 0.5
+nvidia_mask_prob: 0.5
+gradient_checkpointing: true

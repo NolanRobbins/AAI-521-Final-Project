@@ -25,7 +25,7 @@ def _frame() -> pd.DataFrame:
         }
     )
     frame.loc[1, "width"] = 800
-    frame.loc[2, "border_top"] = 400
+    frame.loc[2, "border_top"] = 700  # 50% of the height
     frame.loc[3, "colorfulness"] = 2.0
     frame.loc[0, "sharpness"] = 1.0
     frame.loc[4, "noise_sigma"] = 0.5

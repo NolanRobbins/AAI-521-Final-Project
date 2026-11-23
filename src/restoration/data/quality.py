@@ -46,7 +46,9 @@ def colorfulness(img: FloatImage) -> float:
     return float(std + 0.3 * mean)
 
 
-def border_extent(gray: NDArray[np.float32], dark: float = 0.12, min_std: float = 0.04) -> tuple[int, int, int, int]:
+def border_extent(
+    gray: NDArray[np.float32], dark: float = 0.12, min_std: float = 0.04
+) -> tuple[int, int, int, int]:
     """Detect uniform dark borders (slide mounts, film edges) on each side.
 
     A row/column counts as border while its mean is below ``dark`` or it is nearly

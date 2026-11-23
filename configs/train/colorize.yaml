@@ -1,0 +1,20 @@
+# DDColor fine-tuned on whole period photographs (L -> ab).
+# Use model_key colorize (ConvNeXt-L) on Colab A100; colorize_tiny fits a 16 GB GPU.
+task: colorize
+model_key: colorize
+run_name: colorize_ddcolor_l
+patch_size: 512          # DDColor's native input resolution
+batch_size: 2            # ConvNeXt-L: 7.8 GiB peak (+LPIPS); effective batch 8
+grad_accum: 4
+num_workers: 4
+lr: 1.0e-5
+weight_decay: 1.0e-2
+max_steps: 4000
+warmup_steps: 200
+val_every: 500
+val_limit: 128
+pixel_loss: l1
+lpips_weight: 0.5        # perceptual term: colour has many plausible answers
+colorfulness_weight: 0.5 # counteract the L1 pull toward desaturated means
+select_metric: lpips
+correct_target_fading: true  # EDA: both archives' colours are dye-faded (see notebook 01)

@@ -160,7 +160,9 @@ def download_records(
 
     done: list[ImageRecord] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(_fetch_one, r, session, images_dir, limiter, max_side) for r in records]
+        futures = [
+            pool.submit(_fetch_one, r, session, images_dir, limiter, max_side) for r in records
+        ]
         for fut in tqdm(as_completed(futures), total=len(futures), desc=out_dir.name):
             done.append(fut.result())
 

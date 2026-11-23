@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from transformers import Swin2SRForImageSuperResolution
 
 FloatImage = NDArray[np.float32]
+GENERIC_PROMPT = "an old photograph, high quality, detailed"
 BoolMask = NDArray[np.bool_]
 TensorFn = Callable[[torch.Tensor], torch.Tensor]
 
@@ -215,13 +216,13 @@ def inpaint_sd(
     img: FloatImage,
     mask: BoolMask,
     *,
-    prompt: str = "an old photograph, high quality, detailed",
+    prompt: str = GENERIC_PROMPT,
     negative_prompt: str = "text, watermark, frame, border, blurry, artifacts",
     max_side: int = 768,
     steps: int = 30,
     guidance_scale: float = 6.0,
     seed: int = 0,
-    latent_dilate_px: int = 6,
+    latent_dilate_px: int = 3,
 ) -> FloatImage:
     """Stable Diffusion inpainting with composite-back of only the masked region.
 
@@ -231,8 +232,10 @@ def inpaint_sd(
 
     SD's UNet sees the mask at 1/8 resolution, so 1-4 px scratches largely disappear
     from the latent mask and the model re-draws them as lines. The mask is therefore
-    dilated by ``latent_dilate_px`` (at working resolution) before generation, and the
-    same dilated region is composited back.
+    dilated by ``latent_dilate_px`` (at working resolution) *for generation only*; when
+    compositing, only the true hole (+1 px, 2 px feather) is pasted back, because
+    replacing the whole dilated band with VAE-decoded pixels measurably damages intact
+    context (val, 12 images: SSIM 0.886 -> 0.915; see docs/decisions.md D8).
     """
     _check_image(img)
     h, w = img.shape[:2]
@@ -245,7 +248,6 @@ def inpaint_sd(
     if latent_dilate_px > 0:
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * latent_dilate_px + 1,) * 2)
         small_mask = cv2.dilate(small_mask, kernel)
-    gen_mask = cv2.resize(small_mask, (w, h), interpolation=cv2.INTER_NEAREST).astype(bool) | mask
     runner = cast(Any, pipe)  # diffusers pipelines are untyped
     generator = torch.Generator(device=runner.device).manual_seed(seed)
     result = runner(
@@ -262,4 +264,4 @@ def inpaint_sd(
     filled = cv2.resize(
         np.asarray(result, dtype=np.float32) / 255.0, (w, h), interpolation=cv2.INTER_CUBIC
     )
-    return composite(img, np.clip(filled, 0, 1).astype(np.float32), gen_mask, dilate_px=0)
+    return composite(img, np.clip(filled, 0, 1).astype(np.float32), mask, dilate_px=1, feather_px=2)

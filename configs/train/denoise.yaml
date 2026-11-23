@@ -1,0 +1,16 @@
+# SCUNet blind denoiser fine-tuned on film grain + Gaussian noise (+ JPEG).
+task: denoise
+model_key: denoise
+run_name: denoise_scunet
+patch_size: 256          # multiple of 64 (SCUNet downsampling)
+batch_size: 4            # 7.8 GiB peak on 16 GB; effective batch 8 via accumulation
+grad_accum: 2
+num_workers: 4
+lr: 2.0e-5               # low LR: adapt, don't overwrite, the pretrained prior
+weight_decay: 1.0e-4
+max_steps: 6000
+warmup_steps: 200
+val_every: 500
+val_limit: 128
+pixel_loss: charbonnier
+select_metric: psnr

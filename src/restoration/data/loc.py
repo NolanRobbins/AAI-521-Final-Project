@@ -207,9 +207,7 @@ def crawl_collection(
         pages = sorted(rng.sample(range(1, n_pages + 1), wanted))
 
     records: dict[str, ImageRecord] = {}
-    for record in iter_collection(
-        session, collection, source, per_page=per_page, pages=pages
-    ):
+    for record in iter_collection(session, collection, source, per_page=per_page, pages=pages):
         records.setdefault(record.image_id, record)
     selected = list(records.values())
     if limit is not None and len(selected) > limit:

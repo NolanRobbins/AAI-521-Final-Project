@@ -53,7 +53,9 @@ curation:
   min_colorfulness: 8.0          # drop near-greyscale scans from colour sources
   sharpness_min_percentile: 5    # drop the blurriest 5% per source
   noise_max_percentile: 95       # drop the noisiest 5% per source
-  max_border_fraction: 0.25      # drop if borders would remove >25% of either side
+  # Borders are cropped at load time; only drop when nearly nothing would remain. EDA showed
+  # the detector also flags dark low-key scenes, and dropping those biases toward daylight.
+  max_border_fraction: 0.45
 
 splits:
   val_fraction: 0.10

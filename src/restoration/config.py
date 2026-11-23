@@ -15,6 +15,7 @@ import yaml
 from pydantic import BaseModel, Field, HttpUrl
 
 DATA_ROOT_ENV = "AAI521_DATA_ROOT"
+CHECKPOINT_ROOT_ENV = "AAI521_CHECKPOINT_ROOT"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = PROJECT_ROOT / "configs"
 
@@ -41,6 +42,19 @@ def data_root() -> Path:
         ``$AAI521_DATA_ROOT`` if set, else ``<project>/data``.
     """
     root = Path(os.environ.get(DATA_ROOT_ENV, PROJECT_ROOT / "data")).expanduser()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def checkpoint_root() -> Path:
+    """Where fine-tuned weights and run logs go.
+
+    Defaults to ``<data_root>/checkpoints``. On Colab, point ``$AAI521_CHECKPOINT_ROOT``
+    at Google Drive so checkpoints survive the session, while ``$AAI521_DATA_ROOT``
+    stays on the fast local disk.
+    """
+    default = data_root() / "checkpoints"
+    root = Path(os.environ.get(CHECKPOINT_ROOT_ENV, default)).expanduser()
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -110,7 +124,7 @@ class CurationConfig(_Base):
     min_colorfulness: float = Field(8.0, ge=0)
     sharpness_min_percentile: float = Field(5, ge=0, le=100)
     noise_max_percentile: float = Field(95, ge=0, le=100)
-    max_border_fraction: float = Field(0.25, gt=0, lt=0.5)
+    max_border_fraction: float = Field(0.45, gt=0, le=0.5)
 
 
 class SplitConfig(_Base):

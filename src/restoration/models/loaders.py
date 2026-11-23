@@ -98,9 +98,17 @@ def load_ddcolor(
 
 
 def load_sd_inpaint(
-    device: torch.device | None = None, dtype: torch.dtype = torch.float16
+    device: torch.device | None = None,
+    dtype: torch.dtype = torch.float16,
+    lora_dir: Path | None = None,
 ) -> StableDiffusionInpaintPipeline:
     """Stable Diffusion 1.5 inpainting pipeline (``inpaint``), fp16, no safety checker.
+
+    Args:
+        device: Target device.
+        dtype: Weight dtype.
+        lora_dir: Optional fine-tuned LoRA directory (``best_lora/`` from training);
+            the adapter is fused into the UNet for inference speed.
 
     The safety checker is omitted because inputs are archival photographs restored
     locally, and it would blank legitimate historical content (false positives).
@@ -115,6 +123,9 @@ def load_sd_inpaint(
         requires_safety_checker=False,
     )
     pipe.set_progress_bar_config(disable=True)
+    if lora_dir is not None:
+        pipe.load_lora_weights(str(lora_dir))
+        pipe.fuse_lora()
     return cast("StableDiffusionInpaintPipeline", pipe.to(device or default_device()))
 
 
@@ -124,3 +135,26 @@ def load_lama(device: torch.device | None = None) -> torch.jit.ScriptModule:
     target = device or default_device()
     model = torch.jit.load(str(weights), map_location=target)  # type: ignore[no-untyped-call]
     return cast(torch.jit.ScriptModule, model.eval())
+
+
+def load_finetuned_weights(
+    model: nn.Module, run_dir: Path, filename: str = "best.safetensors"
+) -> nn.Module:
+    """Load fine-tuned weights written by :func:`restoration.training.trainer.train`.
+
+    Args:
+        model: Freshly constructed pretrained model of the same architecture.
+        run_dir: Training run directory (``<checkpoint_root>/<run_name>``).
+        filename: Weights file inside ``run_dir``.
+
+    Returns:
+        ``model`` with fine-tuned weights, in eval mode.
+    """
+    from safetensors.torch import load_model
+
+    path = run_dir / filename
+    if not path.is_file():
+        raise FileNotFoundError(f"No fine-tuned weights at {path}; train the model first")
+    missing, unexpected = load_model(model, str(path), strict=True)
+    assert not missing and not unexpected
+    return model.eval()
