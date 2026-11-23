@@ -1,0 +1,54 @@
+# Pretrained Hugging Face checkpoints, one primary model per task plus comparison models.
+# Rationale for each choice is recorded in docs/decisions.md.
+models:
+  denoise:
+    repo_id: deepinv/scunet
+    allow_patterns: ["scunet_color_real_psnr.pth"]
+    role: primary
+    notes: SCUNet (Zhang et al. 2023), blind real-noise denoiser; no noise level input.
+
+  denoise_drunet:
+    repo_id: deepinv/drunet
+    allow_patterns: ["drunet_deepinv_color_finetune_22k.pth", "README.md"]
+    role: comparison
+    notes: DRUNet, non-blind (noise-level map input); strong Gaussian denoising reference.
+
+  super_resolution:
+    repo_id: caidas/swin2SR-realworld-sr-x4-64-bsrgan-psnr
+    allow_patterns: ["*.json", "*.bin", "*.safetensors", "README.md"]
+    role: primary
+    notes: Swin2SR x4 trained on BSRGAN real-world degradations; transformers-native.
+
+  colorize:
+    repo_id: piddnad/ddcolor_modelscope
+    allow_patterns: ["*.json", "*.bin", "README.md"]
+    role: primary
+    notes: DDColor ConvNeXt-L, 512 px input; predicts Lab ab channels from L.
+
+  colorize_tiny:
+    repo_id: piddnad/ddcolor_paper_tiny
+    allow_patterns: ["*.json", "*.bin", "README.md"]
+    role: comparison
+    notes: DDColor ConvNeXt-T; fast iteration and ablation on the local 16 GB GPU.
+
+  inpaint:
+    repo_id: stable-diffusion-v1-5/stable-diffusion-inpainting
+    allow_patterns:
+      - model_index.json
+      - scheduler/*
+      - tokenizer/*
+      - feature_extractor/*
+      - text_encoder/config.json
+      - text_encoder/model.fp16.safetensors
+      - unet/config.json
+      - unet/diffusion_pytorch_model.fp16.safetensors
+      - vae/config.json
+      - vae/diffusion_pytorch_model.fp16.safetensors
+    role: primary
+    notes: SD 1.5 inpainting (9-channel UNet), fine-tuned with LoRA; fp16 weights only.
+
+  inpaint_lama:
+    repo_id: fashn-ai/LaMa
+    allow_patterns: ["big-lama.pt"]
+    role: comparison
+    notes: Big-LaMa TorchScript (Fourier convolutions); strong non-diffusion inpainting baseline.

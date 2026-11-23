@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Data, weights and run artifacts (never committed; see README "Data")
+/data/
+/checkpoints/
+/outputs/
+/runs/
+/logs/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
+
+# Secrets / local config
+.env
+
+# Notebooks / OS / editor
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
