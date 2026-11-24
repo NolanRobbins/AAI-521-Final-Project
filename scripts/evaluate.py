@@ -28,6 +28,7 @@ from restoration.data.quality import estimate_noise_sigma
 from restoration.evaluation import baselines, harness
 from restoration.models import inference, loaders
 from restoration.training.datasets import PairDatasetConfig, RestorationPairs
+from restoration.utils.device import default_device, empty_cache
 from restoration.utils.logging import setup_logging
 from restoration.utils.seed import seed_everything
 
@@ -54,8 +55,7 @@ def finetuned_dir(task: str) -> Path | None:
 
 def free() -> None:
     """Release cached GPU memory between models."""
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    empty_cache()
 
 
 def run_methods(
@@ -223,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     setup_logging(logs_dir(), "evaluate")
     seed_everything(args.seed)
-    device = loaders.default_device()
+    device = default_device()
     out_dir = data_root() / "outputs" / "eval"
 
     for task in args.tasks:

@@ -36,6 +36,7 @@ from restoration.config import checkpoint_root
 from restoration.evaluation import metrics
 from restoration.training.datasets import PairDatasetConfig, RestorationPairs, Task
 from restoration.training.tasks import ADAPTERS, Batch, TaskAdapter
+from restoration.utils.device import default_device
 from restoration.utils.seed import seed_everything
 
 logger = logging.getLogger(__name__)
@@ -232,14 +233,14 @@ def train(cfg: TrainConfig, device: torch.device | None = None) -> Path:
 
     Args:
         cfg: Training configuration.
-        device: Device (defaults to CUDA if available).
+        device: Device (defaults to CUDA, then MPS, then CPU).
 
     Returns:
         Directory containing ``best.safetensors``, ``last_state.pt``, ``config.json``
         and ``metrics.csv``.
     """
     seed_everything(cfg.seed)
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = device or default_device()
     if device.type == "cuda":
         # Fail fast with OOM instead of letting the Windows driver silently spill into
         # system RAM, which slows training by an order of magnitude.

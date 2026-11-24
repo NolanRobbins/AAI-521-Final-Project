@@ -44,6 +44,7 @@ from restoration.models.inference import GENERIC_PROMPT
 from restoration.models.registry import model_path
 from restoration.training.datasets import PairDatasetConfig, RestorationPairs
 from restoration.training.trainer import MetricsLog, resolve_precision, run_dir
+from restoration.utils.device import default_device
 from restoration.utils.seed import seed_everything
 
 logger = logging.getLogger(__name__)
@@ -205,7 +206,7 @@ def train_inpaint_lora(cfg: InpaintLoraConfig, device: torch.device | None = Non
     from peft.utils import set_peft_model_state_dict
 
     seed_everything(cfg.seed)
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = device or default_device()
     amp_dtype = resolve_precision(cfg.precision, device)
     weight_dtype = amp_dtype or torch.float32
     out = run_dir(cfg.run_name)

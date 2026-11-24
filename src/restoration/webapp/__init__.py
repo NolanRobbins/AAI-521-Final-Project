@@ -107,9 +107,9 @@ def create_app(pipeline: RestorationPipeline | None = None) -> Flask:
 
     @app.get("/api/health")
     def health() -> Any:
-        import torch
+        from restoration.utils.device import default_device
 
-        return jsonify(status="ok", cuda=torch.cuda.is_available())
+        return jsonify(status="ok", device=default_device().type)
 
     @app.post("/api/restore")
     def restore() -> Any:

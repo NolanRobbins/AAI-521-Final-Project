@@ -17,17 +17,13 @@ import torch
 from torch import nn
 
 from restoration.models.registry import model_path
+from restoration.utils.device import default_device
 
 if TYPE_CHECKING:
     from diffusers import StableDiffusionInpaintPipeline
     from transformers import Swin2SRForImageSuperResolution
 
 logger = logging.getLogger(__name__)
-
-
-def default_device() -> torch.device:
-    """CUDA if available, else CPU."""
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def _single_file(snapshot: Path, pattern: str) -> Path:

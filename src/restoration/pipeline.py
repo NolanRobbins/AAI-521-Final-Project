@@ -28,6 +28,7 @@ import yaml
 from restoration.config import CONFIG_DIR, checkpoint_root
 from restoration.data import degradations as deg
 from restoration.models import inference, loaders
+from restoration.utils.device import default_device, empty_cache
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ class PipelineConfig:
     inpaint_steps: int = 30
     sr_max_input_side: int = 1024
     run_names: dict[TaskName, str] = field(default_factory=default_run_names)
-    device: torch.device = field(default_factory=loaders.default_device)
+    device: torch.device = field(default_factory=default_device)
 
 
 @dataclass
@@ -222,5 +223,4 @@ class RestorationPipeline:
     def unload(self) -> None:
         """Free all loaded models (and cached GPU memory)."""
         self._models.clear()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        empty_cache()

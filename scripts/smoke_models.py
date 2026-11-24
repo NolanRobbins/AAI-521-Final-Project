@@ -21,13 +21,13 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-import torch
 from PIL import Image
 from skimage.metrics import peak_signal_noise_ratio
 
 from restoration.config import data_root, logs_dir, raw_dir
 from restoration.data import degradations as deg
 from restoration.models import inference, loaders
+from restoration.utils.device import default_device, empty_cache, synchronize
 from restoration.utils.logging import setup_logging
 from restoration.utils.seed import seed_everything
 
@@ -52,12 +52,10 @@ def _save_panel(images: list[FloatImage], path: Path) -> None:
 
 
 def _timed(fn: Callable[[], FloatImage]) -> tuple[FloatImage, float]:
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
+    synchronize()
     start = time.perf_counter()
     out = fn()
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
+    synchronize()
     return out, time.perf_counter() - start
 
 
@@ -74,7 +72,7 @@ def run(image_path: Path, crop: int, seed: int) -> list[dict[str, float | str]]:
     full = deg.to_float(np.asarray(Image.open(image_path).convert("RGB")))
     clean = deg.random_crop(full, crop, rng)
     out_dir = data_root() / "outputs" / "smoke"
-    device = loaders.default_device()
+    device = default_device()
     rows: list[dict[str, float | str]] = []
 
     def record(
@@ -134,8 +132,7 @@ def run(image_path: Path, crop: int, seed: int) -> list[dict[str, float | str]]:
     record("super_resolution", "swin2sr_x4", bicubic, out, pair.target, secs)
     del swin
 
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    empty_cache()
     logger.info("Panels written to %s", out_dir)
     return rows
 
@@ -150,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(logs_dir(), "smoke_models")
     seed_everything(args.seed)
     image = args.image or _default_image()
-    logger.info("Image: %s | device: %s", image, loaders.default_device())
+    logger.info("Image: %s | device: %s", image, default_device())
     rows = run(image, args.crop, args.seed)
     for row in rows:
         logger.info(
