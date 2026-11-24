@@ -144,7 +144,8 @@ class RestorationPipeline:
             model = loaders.load_ddcolor(self.cfg.colorize_model, device)
         else:
             lora = run / "best_lora" if run else None
-            dtype = torch.float16 if device.type == "cuda" else torch.float32
+            # fp16 on MPS matches fp32 within 3/255 at half the memory (decisions D11).
+            dtype = torch.float16 if device.type in ("cuda", "mps") else torch.float32
             model = loaders.load_sd_inpaint(device, dtype=dtype, lora_dir=lora)
         if run is not None and task != "inpaint":
             net = model[0] if task == "colorize" else model

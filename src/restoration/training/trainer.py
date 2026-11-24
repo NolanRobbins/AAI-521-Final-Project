@@ -90,6 +90,7 @@ def run_dir(run_name: str) -> Path:
 
 
 def resolve_precision(precision: Precision, device: torch.device) -> torch.dtype | None:
+    # MPS stays fp32: AMP gave no speed-up there and DDColor fails under it (decisions D11).
     if device.type != "cuda" or precision == "fp32":
         return None
     if precision == "bf16" or (precision == "auto" and torch.cuda.is_bf16_supported()):
