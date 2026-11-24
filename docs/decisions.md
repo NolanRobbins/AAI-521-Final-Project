@@ -144,3 +144,28 @@ OpenCV Telea still scores higher on pixel metrics (PSNR 33.9, hole-PSNR 23.1 vs 
 That is expected: smooth interpolation is mean-seeking, which PSNR rewards on thin
 scratches. Inpainting is therefore evaluated **per hole-size bin** and with LPIPS, where
 generative fill should win on large holes.
+
+## D11 — Apple-silicon (MPS) support for local inference (2026-11-24)
+
+`restoration.utils.device.default_device()` picks CUDA → MPS → CPU; `empty_cache()` and
+`synchronize()` dispatch to `torch.cuda` or `torch.mps`. Tested on an Apple M4 (24 GB),
+torch 2.11.0, macOS wheels from PyPI.
+
+* **SD inpainting runs in fp16 on MPS.** It matches fp32 within 3/255 per pixel (no
+  NaNs or black images) at half the weight memory, and runs at the same speed.
+* **Big-LaMa (TorchScript) runs on MPS as is**, so it needs no CPU fallback.
+* **Fine-tuning stays fp32 on MPS** (`resolve_precision`). On a 3-step check, bf16 and
+  fp16 autocast trained SCUNet and Swin2SR but were no faster. DDColor fails under
+  both (`div_true_strided_float_bfloat` / `_half`: MPS lacks the mixed-dtype kernel).
+* **`PYTORCH_ENABLE_MPS_FALLBACK` is not needed**: all four tasks ran with no
+  unsupported-op errors.
+
+Web-app timings (512 px input, pretrained weights, warm models; first request adds model
+load time):
+
+| Task | MPS (s) | Note |
+|---|---|---|
+| Denoise (SCUNet) | 0.9 | |
+| Inpaint (SD 1.5, 30 steps, fp16) | 42 | ≈ 1.4 s/step |
+| Colorize (DDColor-L) | 0.3 | |
+| Super-res ×4 (Swin2SR) → 2048 px | 35 | 9 tiles; ≈ 2× faster than CPU |

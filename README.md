@@ -61,6 +61,8 @@ source ~/.venvs/aai521/bin/activate        # Windows: ~/.venvs/aai521/Scripts/ac
 
 # 2. PyTorch for your CUDA version (skip on Colab)
 uv pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
+# Apple silicon: the default PyPI wheels include MPS (Metal) support
+# uv pip install torch==2.11.0 torchvision==0.26.0
 
 # 3. Project + dev tools
 uv pip install -r requirements-dev.txt
