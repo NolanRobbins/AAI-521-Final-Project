@@ -1,4 +1,4 @@
-.PHONY: install test lint format clean data models smoke curate
+.PHONY: install test lint format clean data models smoke curate pack train evaluate app
 
 PYTHON ?= python
 
@@ -28,6 +28,18 @@ smoke:
 
 curate:
 	$(PYTHON) scripts/curate_and_split.py
+
+pack:
+	$(PYTHON) scripts/pack_dataset.py
+
+train:
+	for t in super_resolution denoise colorize inpaint; do $(PYTHON) scripts/train.py --config configs/train/$$t.yaml; done
+
+evaluate:
+	$(PYTHON) scripts/evaluate.py
+
+app:
+	$(PYTHON) -m restoration.webapp
 
 clean:
 	find . -type d -name "__pycache__" -prune -exec rm -rf {} +

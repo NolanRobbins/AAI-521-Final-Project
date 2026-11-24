@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Historical Photo Restoration · AAI-521 Group 3</title>
+<style>
+  :root {
+    --surface: #fcfcfb; --page: #f4f3ef; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --line: #e1e0d9; --accent: #2a78d6; --accent-ink: #ffffff; --warn: #b4560f; --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--page); }
+  header { padding: 20px 28px 8px; }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; color: var(--ink-2); }
+  main { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 20px; padding: 16px 28px 40px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px; }
+  label { display: block; }
+  .drop { border: 2px dashed var(--line); border-radius: var(--radius); padding: 18px; text-align: center; color: var(--ink-2); cursor: pointer; }
+  .drop.over { border-color: var(--accent); }
+  .canvas-wrap { position: relative; margin-top: 12px; display: none; }
+  .canvas-wrap canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
+  #maskCanvas { position: absolute; inset: 0; cursor: crosshair; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .task { display: grid; grid-template-columns: 22px 1fr; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .task:last-child { border-bottom: 0; }
+  .task small { color: var(--ink-2); display: block; }
+  .step { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 4px; }
+  button { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); padding: 7px 12px; cursor: pointer; color: var(--ink); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); width: 100%; padding: 10px; font-weight: 600; margin-top: 14px; }
+  button:disabled { opacity: .55; cursor: progress; }
+  input[type=text], textarea { width: 100%; font: inherit; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  .status { margin-top: 10px; color: var(--ink-2); min-height: 1.5em; }
+  .status.error { color: var(--warn); }
+  .compare { position: relative; overflow: hidden; border-radius: 8px; background: #000; user-select: none; }
+  .compare img { display: block; width: 100%; height: auto; }
+  .compare .after { position: absolute; inset: 0; clip-path: inset(0 0 0 50%); }
+  .compare .after img { height: 100%; object-fit: contain; }
+  .compare .handle { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35); pointer-events: none; }
+  .compare .tag { position: absolute; top: 8px; padding: 2px 8px; border-radius: 999px; background: rgba(11,11,11,.72); color: #fff; font-size: 12px; }
+  #compareRange { width: 100%; margin-top: 8px; }
+  .stages { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+  .stages figure { margin: 0; }
+  .stages img { width: 100%; border-radius: 6px; border: 1px solid var(--line); }
+  .stages figcaption { font-size: 12px; color: var(--ink-2); }
+  table.meta { border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+  table.meta td { padding: 3px 12px 3px 0; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .empty { color: var(--muted); text-align: center; padding: 60px 0; }
+  .rating { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
+  .rating span { width: 140px; color: var(--ink-2); }
+  .rating input { accent-color: var(--accent); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Historical Photo Restoration</h1>
+  <p>Denoise → inpaint → colorize → super-resolve with fine-tuned generative models · AAI-521 Group 3</p>
+</header>
+<main>
+  <section class="card" aria-labelledby="inputTitle">
+    <h2 id="inputTitle">1. Upload a photograph</h2>
+    <label class="drop" id="drop" for="file">Drop an image here or <u>browse</u> (JPEG/PNG/TIFF, ≤ 25 MB)
+      <input type="file" id="file" accept="image/*" class="sr-only">
+    </label>
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="imageCanvas"></canvas>
+      <canvas id="maskCanvas" aria-label="Paint over damaged areas"></canvas>
+    </div>
+    <div class="row" id="maskTools" hidden>
+      <span>Paint damage:</span>
+      <label>brush <input type="range" id="brush" min="2" max="60" value="12"></label>
+      <button type="button" id="clearMask">Clear mask</button>
+    </div>
+
+    <h2 style="margin-top:18px">2. Choose tasks <small style="color:var(--muted);font-weight:400">(always run in this order)</small></h2>
+    {% set info = {
+      "denoise": ("Denoise", "Remove film grain and scan noise (SCUNet)"),
+      "inpaint": ("Inpaint", "Fill scratches, tears and holes (Stable Diffusion + LoRA). Paint the damage above or auto-detect."),
+      "colorize": ("Colorize", "Add colour to black-and-white photos (DDColor)"),
+      "super_resolution": ("Super-resolve ×4", "Increase resolution 4× (Swin2SR)"),
+    } %}
+    {% for t in tasks %}
+    <label class="task"><input type="checkbox" name="tasks" value="{{ t }}" {% if t != 'super_resolution' and t != 'inpaint' %}checked{% endif %}>
+      <span><span class="step">{{ loop.index }}.</span><b>{{ info[t][0] }}</b><small>{{ info[t][1] }}</small></span></label>
+    {% endfor %}
+
+    <div class="row"><label><input type="checkbox" id="autoMask"> Auto-detect scratches (if no mask painted)</label></div>
+    <div class="row"><label><input type="checkbox" id="finetuned" checked> Use fine-tuned models (uncheck to compare with pretrained)</label></div>
+    <div style="margin-top:10px"><label for="prompt">Inpainting prompt (optional)</label>
+      <input type="text" id="prompt" placeholder="an old photograph, high quality, detailed"></div>
+    <button class="primary" id="run" disabled>Restore photo</button>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="card" aria-labelledby="resultTitle">
+    <h2 id="resultTitle">Result</h2>
+    <div class="empty" id="empty">Upload a photo and press <b>Restore photo</b>.</div>
+    <div id="result" hidden>
+      <div class="compare" id="compare">
+        <img id="beforeImg" alt="Original photograph">
+        <div class="after"><img id="afterImg" alt="Restored photograph"></div>
+        <div class="handle" id="handle"></div>
+        <span class="tag" style="left:8px">Before</span><span class="tag" style="right:8px">After</span>
+      </div>
+      <label class="sr-only" for="compareRange">Before/after split</label>
+      <input type="range" id="compareRange" min="0" max="100" value="50">
+      <div class="row"><a id="download" download="restored.png"><button type="button">Download full resolution (PNG)</button></a></div>
+      <div class="stages" id="stages"></div>
+      <table class="meta" id="meta"></table>
+
+      <h2 style="margin-top:22px">How did we do? (user testing)</h2>
+      <form id="feedback">
+        <div class="rating"><span>Overall</span>{% for i in range(1,6) %}<label><input type="radio" name="overall" value="{{ i }}"> {{ i }}</label>{% endfor %}</div>
+        <div id="taskRatings"></div>
+        <textarea name="comment" rows="2" placeholder="What looked wrong or right?"></textarea>
+        <button type="submit" style="margin-top:8px">Send feedback</button> <span id="fbStatus" class="status"></span>
+      </form>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const imgCanvas = $("imageCanvas"), maskCanvas = $("maskCanvas");
+const ictx = imgCanvas.getContext("2d"), mctx = maskCanvas.getContext("2d");
+let file = null, painted = false, drawing = false, lastResult = null;
+const LABELS = {denoise: "Denoised", inpaint: "Inpainted", colorize: "Colorized", super_resolution: "Super-resolved ×4"};
+
+function loadFile(f) {
+  if (!f || !f.type.startsWith("image/")) { setStatus("Please choose an image file.", true); return; }
+  file = f; painted = false;
+  const img = new Image();
+  img.onload = () => {
+    const scale = Math.min(1, 1400 / Math.max(img.width, img.height));
+    for (const c of [imgCanvas, maskCanvas]) { c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale); }
+    ictx.drawImage(img, 0, 0, imgCanvas.width, imgCanvas.height);
+    mctx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+    $("canvasWrap").style.display = "block"; $("maskTools").hidden = false; $("run").disabled = false;
+    setStatus(`${img.width} × ${img.height} px loaded. Optionally paint over damage for inpainting.`);
+  };
+  img.src = URL.createObjectURL(f);
+}
+$("file").addEventListener("change", (e) => loadFile(e.target.files[0]));
+const drop = $("drop");
+["dragover", "dragenter"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove("over")));
+drop.addEventListener("drop", (e) => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
+
+function pos(e) {
+  const r = maskCanvas.getBoundingClientRect();
+  const p = e.touches ? e.touches[0] : e;
+  return [(p.clientX - r.left) * maskCanvas.width / r.width, (p.clientY - r.top) * maskCanvas.height / r.height];
+}
+function paint(e) {
+  if (!drawing) return; e.preventDefault();
+  const [x, y] = pos(e);
+  mctx.fillStyle = "rgba(255, 64, 64, 0.6)";
+  mctx.beginPath(); mctx.arc(x, y, +$("brush").value, 0, Math.PI * 2); mctx.fill(); painted = true;
+}
+maskCanvas.addEventListener("pointerdown", (e) => { drawing = true; paint(e); });
+maskCanvas.addEventListener("pointermove", paint);
+window.addEventListener("pointerup", () => { drawing = false; });
+$("clearMask").onclick = () => { mctx.clearRect(0, 0, maskCanvas.width, maskCanvas.height); painted = false; };
+
+function setStatus(msg, err = false) { const s = $("status"); s.textContent = msg; s.classList.toggle("error", err); }
+
+$("run").onclick = async () => {
+  const tasks = [...document.querySelectorAll("input[name=tasks]:checked")].map((c) => c.value);
+  if (!tasks.length) { setStatus("Select at least one task.", true); return; }
+  const fd = new FormData();
+  fd.append("image", file);
+  tasks.forEach((t) => fd.append("tasks", t));
+  fd.append("finetuned", $("finetuned").checked);
+  fd.append("auto_mask", $("autoMask").checked);
+  fd.append("prompt", $("prompt").value);
+  if (painted) fd.append("mask", await new Promise((res) => maskCanvas.toBlob(res, "image/png")), "mask.png");
+  $("run").disabled = true;
+  const t0 = performance.now();
+  const timer = setInterval(() => setStatus(`Restoring… ${((performance.now() - t0) / 1000).toFixed(0)} s (first run loads models)`), 500);
+  try {
+    const resp = await fetch("api/restore", { method: "POST", body: fd });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    lastResult = { tasks, weights: data.weights }; showResult(data, tasks);
+    setStatus(`Done in ${data.total_seconds} s.`);
+  } catch (err) { setStatus(`Error: ${err.message}`, true); }
+  finally { clearInterval(timer); $("run").disabled = false; }
+};
+
+function showResult(d, tasks) {
+  $("empty").hidden = true; $("result").hidden = false;
+  $("beforeImg").src = d.input; $("afterImg").src = d.output; $("download").href = d.output_full;
+  const stages = $("stages"); stages.innerHTML = "";
+  const add = (src, caption) => { const f = document.createElement("figure"); f.innerHTML = `<img alt="${caption}" src="${src}"><figcaption>${caption}</figcaption>`; stages.appendChild(f); };
+  add(d.input, "Input");
+  if (d.mask) add(d.mask, "Damage mask");
+  for (const [k, v] of Object.entries(d.stages)) add(v, `${LABELS[k]} · ${d.seconds[k]} s`);
+  const rows = [["Input size", d.size.input.join(" × ")], ["Output size", d.size.output.join(" × ")],
+    ...Object.entries(d.weights).map(([k, v]) => [`${LABELS[k] || k} weights`, v])];
+  $("meta").innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("");
+  $("taskRatings").innerHTML = tasks.map((t) => `<div class="rating"><span>${LABELS[t]}</span>${[1,2,3,4,5].map((i) => `<label><input type="radio" name="${t}" value="${i}"> ${i}</label>`).join("")}</div>`).join("");
+  setSplit(50); $("compareRange").value = 50;
+}
+function setSplit(v) { document.querySelector(".compare .after").style.clipPath = `inset(0 0 0 ${v}%)`; $("handle").style.left = `${v}%`; }
+$("compareRange").addEventListener("input", (e) => setSplit(e.target.value));
+$("compare").addEventListener("pointermove", (e) => { if (e.buttons !== 1) return; const r = e.currentTarget.getBoundingClientRect(); const v = Math.max(0, Math.min(100, (e.clientX - r.left) / r.width * 100)); setSplit(v); $("compareRange").value = v; });
+
+$("feedback").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = new FormData(e.target); const body = Object.fromEntries(form.entries());
+  if (lastResult) { body.tasks = lastResult.tasks.join(","); body.weights = JSON.stringify(lastResult.weights); }
+  const resp = await fetch("api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  $("fbStatus").textContent = resp.ok ? "Thanks, saved." : "Could not save feedback.";
+});
+</script>
+</body>
+</html>

@@ -22,17 +22,19 @@ Photos Back to Life*.
 | Data acquisition (LoC FSA/OWI, DOCUMERICA, NVIDIA masks, DIV2K) | ✅ `scripts/download_data.py` |
 | Pretrained checkpoints (7 models) | ✅ `scripts/download_models.py`, smoke-tested on GPU |
 | Synthetic degradation pipeline | ✅ `restoration.data.degradations` |
-| Curation + leakage-safe splits | ✅ 6,899 kept → 5,521 / 689 / 689 train/val/test (`docs/decisions.md` D7) |
-| Fine-tuning (per task) | ⏳ next |
-| Evaluation harness + baselines | ⏳ |
-| Flask web app | ⏳ |
+| Curation + leakage-safe splits | ✅ 7,163 kept → 5,731 / 716 / 716 train/val/test (`docs/decisions.md` D7, D9) |
+| Fine-tuning framework (4 tasks, resumable, Colab-ready) | ✅ `scripts/train.py`, `configs/train/*.yaml` |
+| Full fine-tuning runs | ⏳ running (RTX 5060 Ti) |
+| Evaluation harness (baselines vs zero-shot vs fine-tuned, bootstrap CIs) | ✅ `scripts/evaluate.py` · results ⏳ |
+| Restoration pipeline + Flask web app (mask brush, before/after, user feedback) | ✅ `python -m restoration.webapp` |
+| Submission notebooks | ✅ 01 (executed) · 02, 04 built · 03 after evaluation |
 
 ## Data
 
 | Dataset | Role | Size | Source |
 |---|---|---|---|
-| LoC FSA/OWI Color Photographs, 1939–44 | train/val/test | 1,615 downloaded → 1,410 kept | [loc.gov](https://www.loc.gov/collections/fsa-owi-color-photographs/) |
-| DOCUMERICA (EPA), 1972–77 | train/val/test | 6,400 sampled of 15,887 → 5,489 kept | NARA via Wikimedia Commons |
+| LoC FSA/OWI Color Photographs, 1939–44 | train/val/test | 1,615 downloaded → 1,427 kept | [loc.gov](https://www.loc.gov/collections/fsa-owi-color-photographs/) |
+| DOCUMERICA (EPA), 1972–77 | train/val/test | 6,400 sampled of 15,887 → 5,736 kept | NARA via Wikimedia Commons |
 | NVIDIA Irregular Masks (Liu et al., 2018) | inpainting masks | 12,000 | [NVIDIA](https://nv-adlr.github.io/publication/partialconv-inpainting) |
 | LoC FSA/OWI B&W negatives | real-damage test (no GT) | 300-image candidate pool | [loc.gov](https://www.loc.gov/collections/fsa-owi-black-and-white-negatives/) |
 | DIV2K validation HR | modern-photo sanity check | 100 | [ETH Zürich](https://data.vision.ee.ethz.ch/cvl/DIV2K/) |
@@ -72,6 +74,20 @@ cp .env.example .env    # then set AAI521_DATA_ROOT
 **Google Colab:** mount Drive, `pip install -r requirements.txt && pip install -e .`, and
 set `os.environ["AAI521_DATA_ROOT"] = "/content/drive/MyDrive/aai521_data"`.
 
+## Notebooks (submission format)
+
+| Notebook | Contents |
+|---|---|
+| `notebooks/01_data_and_eda.ipynb` | Problem definition, data acquisition, EDA, curation, splits, degradation pipeline |
+| `notebooks/02_finetuning.ipynb` | Modeling methods (theory, losses, transfer learning) and fine-tuning curves |
+| `notebooks/03_evaluation.ipynb` | Test-set comparison: classical vs zero-shot vs fine-tuned, CIs, qualitative results |
+| `notebooks/04_web_app.ipynb` | Integrated pipeline, Flask deployment, user testing |
+
+Every notebook starts with the same setup cell. On **Colab** it clones the repo,
+installs it, mounts Drive, and stages `MyDrive/aai521/aai521_dataset.tar` onto the
+VM's local disk. Checkpoints go to `MyDrive/aai521/checkpoints`. Create the archive
+once with `python scripts/pack_dataset.py` (4.7 GB) and upload it to `MyDrive/aai521/`.
+
 ## Usage
 
 ```bash
@@ -79,9 +95,15 @@ python scripts/download_data.py            # ~1 h, resumable; --sources/--limit 
 python scripts/download_models.py          # ~3.5 GB into the HF cache
 python scripts/smoke_models.py             # zero-shot sanity check -> outputs/smoke/
 python scripts/curate_and_split.py         # quality features, filters, group splits
+python scripts/pack_dataset.py             # one tar for Google Drive / Colab
+
+python scripts/train.py --config configs/train/denoise.yaml           # also: super_resolution, colorize, inpaint
+python scripts/train.py --config configs/train/denoise.yaml --max-steps 150 --train-limit 64     --val-limit 16 --run-name smoke                                     # quick sanity run
+python scripts/evaluate.py                 # test split -> outputs/eval/<task>.csv
+python -m restoration.webapp               # http://127.0.0.1:5000
 ```
 
-Or use `make data | models | smoke | curate | test | lint | format`.
+Or use `make data | models | smoke | curate | train | evaluate | app | test | lint | format`.
 
 ## Repository layout
 
@@ -98,8 +120,15 @@ src/restoration/
                     quality.py, curation.py, splits.py -- EDA features, filters, group splits
   models/           registry.py, loaders.py, inference.py (tiled, task-level inference)
                     third_party/ddcolor/              -- vendored DDColor arch (Apache-2.0)
+  training/         datasets.py (on-the-fly pairs), tasks.py (adapters), trainer.py,
+                    sd_inpaint.py (LoRA)
+  evaluation/       metrics.py, baselines.py, harness.py (bootstrap CIs), plotting.py
+  pipeline.py       denoise -> inpaint -> colorize -> super-resolve
+  webapp/           Flask app + single-page UI
+  colab.py          Drive mount + dataset staging
   utils/            logging, seeding, HTTP (retries, rate limiting, atomic writes)
-tests/unit/         pytest + hypothesis
+notebooks/          submission notebooks 01-04
+tests/              unit + integration (pytest + hypothesis), no GPU needed
 ```
 
 ## Development standards

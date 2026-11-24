@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
 FloatImage = NDArray[np.float32]
 GENERIC_PROMPT = "an old photograph, high quality, detailed"
+SD_MIN_SIDE = 512
 BoolMask = NDArray[np.bool_]
 TensorFn = Callable[[torch.Tensor], torch.Tensor]
 
@@ -239,9 +240,13 @@ def inpaint_sd(
     """
     _check_image(img)
     h, w = img.shape[:2]
-    scale = min(1.0, max_side / max(h, w))
+    # SD 1.5 was trained at 512 px: shrink large images to max_side, enlarge small ones
+    # to a 512 px long side (generation quality collapses at much lower resolutions).
+    target_long = min(max(max(h, w), SD_MIN_SIDE), max_side)
+    scale = target_long / max(h, w)
     work_w, work_h = (max(8, int(round(d * scale / 8)) * 8) for d in (w, h))
-    small = cv2.resize(img, (work_w, work_h), interpolation=cv2.INTER_AREA)
+    interp = cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC
+    small = np.clip(cv2.resize(img, (work_w, work_h), interpolation=interp), 0, 1)
     small_mask = cv2.resize(
         mask.astype(np.uint8), (work_w, work_h), interpolation=cv2.INTER_NEAREST
     )
