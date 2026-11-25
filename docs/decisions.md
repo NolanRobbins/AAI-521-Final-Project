@@ -224,3 +224,15 @@ measures scratch detection**. BOPBtL's detector (run on a 256 px-short-side copy
 thin procedural scratches on 3 of 4 images (recall 0.59–0.84, 0 on the fourth) against
 0.27–0.34 for our `detect_scratches`. Neither finds the large NVIDIA holes (recall
 ≤ 0.19), since neither was built for blobs. Report this task **per `mask_type`**.
+
+**Handoff.** One person (Sean, on the Mac) runs the whole chain: export, then BOPBtL, then
+`evaluate.py`, all with the same `--limit`/`--inpaint-limit` and `--seed`, so the loader's
+seed/limit check covers it. Nobody else needs the BOPBtL environment. The results are
+copied to `MyDrive/aai521/outputs/`:
+
+* `eval/denoise_inpaint.csv`: the per-image rows notebook 03 reads.
+* `bopbtl/outputs/<index:04d>.png` and `bopbtl/manifest.csv`: BOPBtL's restored images,
+  for qualitative panels. Image `i` is row `image == i` in the CSV.
+
+Rerun `evaluate.py` and copy the CSV again once the fine-tuned checkpoints exist. BOPBtL
+does not need to rerun as long as the seed and limit are unchanged.
