@@ -111,7 +111,7 @@ def score(pred: FloatImage, item: TestItem, task: str, device: torch.device) -> 
         row["ciede2000"] = float(metrics.ciede2000(p, t))
         row["colorfulness"] = float(metrics.colorfulness(p))
         row["colorfulness_gt"] = float(metrics.colorfulness(t))
-    if task == "inpaint" and item.mask is not None:
+    if task in ("inpaint", "denoise_inpaint") and item.mask is not None:
         m = torch.from_numpy(item.mask.astype(np.float32))[None, None].to(device)
         row["psnr_hole"] = float(metrics.masked_psnr(p, t, m))
     return row
