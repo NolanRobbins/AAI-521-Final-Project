@@ -26,6 +26,7 @@ Photos Back to Life*.
 | Fine-tuning framework (4 tasks, resumable, Colab-ready) | ✅ `scripts/train.py`, `configs/train/*.yaml` |
 | Full fine-tuning runs | ⏳ running (RTX 5060 Ti) |
 | Evaluation harness (baselines vs zero-shot vs fine-tuned, bootstrap CIs) | ✅ `scripts/evaluate.py` · results ⏳ |
+| BOPBtL comparison (`denoise_inpaint` task; BOPBtL in its own CPU venv) | ✅ `scripts/export_bopbtl_inputs.py`, `scripts/run_bopbtl_local.sh` (D12) · results ⏳ |
 | Restoration pipeline + Flask web app (mask brush, before/after, user feedback) | ✅ `python -m restoration.webapp` |
 | Submission notebooks | ✅ 01 (executed) · 02, 04 built · 03 after evaluation |
 
@@ -82,7 +83,7 @@ set `os.environ["AAI521_DATA_ROOT"] = "/content/drive/MyDrive/aai521_data"`.
 |---|---|
 | `notebooks/01_data_and_eda.ipynb` | Problem definition, data acquisition, EDA, curation, splits, degradation pipeline |
 | `notebooks/02_finetuning.ipynb` | Modeling methods (theory, losses, transfer learning) and fine-tuning curves |
-| `notebooks/03_evaluation.ipynb` | Test-set comparison: classical vs zero-shot vs fine-tuned, CIs, qualitative results |
+| `notebooks/03_evaluation.ipynb` | Test-set comparison: classical vs zero-shot vs fine-tuned, CIs, qualitative results; `outputs/eval/denoise_inpaint.csv` holds the BOPBtL comparison (D12) |
 | `notebooks/04_web_app.ipynb` | Integrated pipeline, Flask deployment, user testing |
 
 Every notebook starts with the same setup cell. On **Colab** it clones the repo,
@@ -102,6 +103,11 @@ python scripts/pack_dataset.py             # one tar for Google Drive / Colab
 python scripts/train.py --config configs/train/denoise.yaml           # also: super_resolution, colorize, inpaint
 python scripts/train.py --config configs/train/denoise.yaml --max-steps 150 --train-limit 64     --val-limit 16 --run-name smoke                                     # quick sanity run
 python scripts/evaluate.py                 # test split -> outputs/eval/<task>.csv
+
+# BOPBtL comparison (denoise + inpaint only; BOPBtL runs in its own venv, see D12)
+python scripts/export_bopbtl_inputs.py --limit 60          # -> outputs/bopbtl/inputs/
+bash scripts/run_bopbtl_local.sh                           # -> outputs/bopbtl/outputs/ (CPU)
+python scripts/evaluate.py --tasks denoise_inpaint --inpaint-limit 60
 python -m restoration.webapp               # http://127.0.0.1:5000
 ```
 

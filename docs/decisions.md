@@ -11,8 +11,8 @@ Key design decisions, with the evidence behind them. Newest last.
 | Colorize | **DDColor** ConvNeXt-L (`piddnad/ddcolor_modelscope`) | DDColor-tiny | State-of-the-art automatic colorization (ICCV 2023). It predicts only Lab *ab*, so luminance detail is preserved. Tiny is used for fast local ablations. |
 | Super-res | **Swin2SR x4 real-world** (`caidas/swin2SR-realworld-sr-x4-64-bsrgan-psnr`) | Bicubic | Native to `transformers`. It was trained on BSRGAN real-world degradations, which are closer to old scans than bicubic-only models. |
 
-The comparison against Microsoft's *Bringing Old Photos Back to Life* (Wan et al., 2020) is
-planned for evaluation; it needs its own environment and is not yet wired in.
+The comparison against Microsoft's *Bringing Old Photos Back to Life* (Wan et al., 2020)
+runs in its own environment and is scored on a dedicated `denoise_inpaint` task (D12).
 
 ## D2 — DOCUMERICA from Wikimedia Commons instead of Flickr
 
@@ -169,3 +169,58 @@ load time):
 | Inpaint (SD 1.5, 30 steps, fp16) | 42 | ≈ 1.4 s/step |
 | Colorize (DDColor-L) | 0.3 | |
 | Super-res ×4 (Swin2SR) → 2048 px | 35 | 9 tiles; ≈ 2× faster than CPU |
+
+## D12 — BOPBtL baseline on a `denoise_inpaint` task (2026-11-25)
+
+**Scope.** *Bringing Old Photos Back to Life* (Wan et al., 2020) removes grain and scratches
+but neither colorizes nor upscales, so it is compared only with our denoise + inpaint
+steps. None of the existing tasks fit (`denoise` has grain only, `inpaint` holes only,
+`end_to_end` grey and downsampled inputs), so `evaluate.py --tasks denoise_inpaint` adds one:
+test-split colour crops at **512 px** (the inpaint `patch_size`: SD 1.5's native size, the
+same crops and masks as the `inpaint` task, and a multiple of 16 so BOPBtL keeps the size),
+film grain (`make_denoise_pair`) and then scratches/holes (`make_inpaint_pair`) with the
+same procedural/NVIDIA split by index parity. The target is the clean crop. The builder
+lives in `restoration.evaluation.denoise_inpaint`, so `evaluate.py` and
+`scripts/export_bopbtl_inputs.py` cannot drift.
+
+**Where BOPBtL runs.** On a Mac, CPU, in its own venv (`scripts/run_bopbtl_local.sh`:
+`~/bopbtl` at commit `33875ec`, `~/.venvs/bopbtl`, torch 2.11; none of it is in git or our
+requirements). We run only its stage 1, the two commands `run.py --with_scratch` issues
+(`Global/detection.py --input_size full_size`, then `Global/test.py
+--Scratch_and_Quality_restore`, non-HR). Two shims, no edits to their code: `torch.load`
+gets `map_location="cpu"` (their checkpoints were saved on CUDA) and `weights_only=False`
+(the checkpoints predate that default). Measured: 25 s for 8 images at 512 px (≈ 3 s/image
+including model load), so Colab is unnecessary.
+
+**Fairness choices.**
+
+* **Auto mask vs GT mask.** BOPBtL detects its own scratches, so `ours … (auto mask)`
+  (`RestorationPipeline.run(mask=None, auto_mask=True)`) is the fair comparison.
+  `ours … (GT mask)` and the classical NLM → Telea row get the true mask and are upper
+  bounds.
+* **8-bit inputs.** Inputs are rounded to /255 in the builder, so every method sees
+  exactly the bytes BOPBtL reads from the exported PNG.
+* **Size.** `detection.py` resizes to a multiple of 16 and `test.py` keeps the size, so
+  512 px in gives 512 px out and no resampling touches the metrics. Should a size ever
+  differ, the loader resizes back (bicubic) and logs each image.
+* **Faces off.** `run.py` always runs face detection and enhancement (dlib) after stage 1.
+  Our crops are mostly scenes, and stage 1's output is exactly what `run.py`
+  writes to `final_output` for an image without faces, so we skip dlib entirely.
+* **Fine-tuned rows** appear only when both the denoise and inpaint checkpoints exist (a
+  half fine-tuned row would be mislabelled).
+
+**Smoke test (first 8 test images, seed 521, zero-shot; no fine-tuned checkpoints yet).**
+
+| Method | PSNR | SSIM | LPIPS ↓ | hole PSNR | s/image (MPS) |
+|---|---|---|---|---|---|
+| classical (NLM → Telea), GT mask | 25.72 | 0.622 | 0.473 | 23.12 | 0.3 |
+| ours zero-shot, GT mask | 27.38 | 0.781 | 0.259 | 20.76 | 40.6 |
+| ours zero-shot, auto mask | 16.43 | 0.722 | 0.415 | 5.72 | 42.9 |
+| BOPBtL | 16.09 | 0.663 | 0.408 | 6.42 | ≈ 3 (CPU, offline) |
+
+With 8 images these numbers are only a plumbing check. The pattern is still clear: with
+auto masks, both pipelines leave most damage in place, so **the fair comparison mostly
+measures scratch detection**. BOPBtL's detector (run on a 256 px-short-side copy) finds
+thin procedural scratches on 3 of 4 images (recall 0.59–0.84, 0 on the fourth) against
+0.27–0.34 for our `detect_scratches`. Neither finds the large NVIDIA holes (recall
+≤ 0.19), since neither was built for blobs. Report this task **per `mask_type`**.
