@@ -105,9 +105,9 @@ python scripts/train.py --config configs/train/denoise.yaml --max-steps 150 --tr
 python scripts/evaluate.py                 # test split -> outputs/eval/<task>.csv
 
 # BOPBtL comparison (denoise + inpaint only; BOPBtL runs in its own venv, see D12)
-python scripts/export_bopbtl_inputs.py --limit 60          # -> outputs/bopbtl/inputs/
+python scripts/export_bopbtl_inputs.py --limit 100         # -> outputs/bopbtl/inputs/
 bash scripts/run_bopbtl_local.sh                           # -> outputs/bopbtl/outputs/ (CPU)
-python scripts/evaluate.py --tasks denoise_inpaint --inpaint-limit 60
+python scripts/evaluate.py --tasks denoise_inpaint --inpaint-limit 100
 # then copy outputs/eval/denoise_inpaint.csv and outputs/bopbtl/ to MyDrive/aai521/outputs/ (D12)
 python -m restoration.webapp               # http://127.0.0.1:5000
 ```

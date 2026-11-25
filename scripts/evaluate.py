@@ -6,7 +6,7 @@ them into tables, bootstrap confidence intervals and figures.
 Usage:
     python scripts/evaluate.py                                  # all tasks + end-to-end
     python scripts/evaluate.py --tasks denoise super_resolution --limit 100
-    python scripts/evaluate.py --tasks denoise_inpaint --inpaint-limit 60   # vs BOPBtL (D12)
+    python scripts/evaluate.py --tasks denoise_inpaint --inpaint-limit 100   # vs BOPBtL (D12)
 """
 
 from __future__ import annotations
