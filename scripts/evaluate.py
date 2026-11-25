@@ -6,6 +6,7 @@ them into tables, bootstrap confidence intervals and figures.
 Usage:
     python scripts/evaluate.py                                  # all tasks + end-to-end
     python scripts/evaluate.py --tasks denoise super_resolution --limit 100
+    python scripts/evaluate.py --tasks denoise_inpaint --inpaint-limit 60   # vs BOPBtL (D12)
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ import yaml
 from restoration.config import CONFIG_DIR, checkpoint_root, data_root, logs_dir
 from restoration.data import degradations as deg
 from restoration.data.quality import estimate_noise_sigma
-from restoration.evaluation import baselines, harness
+from restoration.evaluation import baselines, denoise_inpaint, harness
 from restoration.models import inference, loaders
 from restoration.training.datasets import PairDatasetConfig, RestorationPairs
 from restoration.utils.device import default_device, empty_cache
@@ -33,7 +34,7 @@ from restoration.utils.logging import setup_logging
 from restoration.utils.seed import seed_everything
 
 logger = logging.getLogger("evaluate")
-TASKS = ("denoise", "super_resolution", "colorize", "inpaint", "end_to_end")
+TASKS = ("denoise", "super_resolution", "colorize", "inpaint", "end_to_end", "denoise_inpaint")
 
 
 def train_cfg(task: str) -> dict[str, Any]:
@@ -210,6 +211,47 @@ def classical_chain(s: dict[str, Any]) -> deg.FloatImage:
     return baselines.bicubic_upscale(x)
 
 
+def classical_denoise_inpaint(s: dict[str, Any]) -> deg.FloatImage:
+    """NLM -> Telea with the true mask."""
+    return baselines.telea_inpaint(baselines.nlm_denoise(s["inp"]), s["mask"])
+
+
+def denoise_inpaint_methods(
+    device: torch.device, steps: int, items: list[harness.TestItem], seed: int, limit: int
+) -> dict[str, Callable[[], harness.Method]]:
+    """Classical, ours (GT mask = upper bound; auto mask = fair vs BOPBtL), then BOPBtL."""
+    from restoration.pipeline import PipelineConfig, RestorationPipeline
+
+    def ours(finetuned: bool, gt_mask: bool) -> Callable[[], harness.Method]:
+        def make() -> harness.Method:
+            pipe = RestorationPipeline(
+                PipelineConfig(use_finetuned=finetuned, inpaint_steps=steps, device=device)
+            )
+            return lambda s: pipe.run(
+                s["inp"],
+                ["denoise", "inpaint"],
+                mask=s["mask"] if gt_mask else None,
+                auto_mask=not gt_mask,
+                seed=s["index"],
+            ).image
+
+        return make
+
+    # Both checkpoints or neither: a half fine-tuned row would be mislabelled.
+    finetuned = all([finetuned_dir("denoise"), finetuned_dir("inpaint")])
+    factories: dict[str, Callable[[], harness.Method]] = {
+        "classical (NLM → Telea)": lambda: classical_denoise_inpaint
+    }
+    for gt_mask, label in ((True, "GT mask"), (False, "auto mask")):
+        factories[f"ours zero-shot ({label})"] = ours(False, gt_mask)
+        if finetuned:
+            factories[f"ours fine-tuned ({label})"] = ours(True, gt_mask)
+    bopbtl = denoise_inpaint.bopbtl_method(data_root() / "outputs" / "bopbtl", items, seed, limit)
+    if bopbtl is not None:
+        factories["BOPBtL (Wan et al., 2020)"] = lambda: bopbtl
+    return factories
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -253,6 +295,17 @@ def main(argv: list[str] | None = None) -> int:
                 "inpaint", args.inpaint_limit, train_cfg("inpaint")["patch_size"], args.seed
             )
             frame = run_methods(task, items, inpaint_methods(device, args.inpaint_steps), device)
+        elif task == "denoise_inpaint":
+            import pandas as pd
+
+            items = denoise_inpaint.build_items(args.inpaint_limit, args.seed)
+            frames = []
+            for name, factory in denoise_inpaint_methods(
+                device, args.inpaint_steps, items, args.seed, args.inpaint_limit
+            ).items():
+                frames.append(harness.evaluate_task(task, items, {name: factory()}, device))
+                free()
+            frame = pd.concat(frames, ignore_index=True)
         else:
             items = end_to_end_items(args.inpaint_limit, args.seed)
             import pandas as pd
