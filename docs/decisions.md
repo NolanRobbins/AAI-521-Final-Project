@@ -189,8 +189,8 @@ requirements). We run only its stage 1, the two commands `run.py --with_scratch`
 (`Global/detection.py --input_size full_size`, then `Global/test.py
 --Scratch_and_Quality_restore`, non-HR). Two shims, no edits to their code: `torch.load`
 gets `map_location="cpu"` (their checkpoints were saved on CUDA) and `weights_only=False`
-(the checkpoints predate that default). Measured: 25 s for 8 images at 512 px (≈ 3 s/image
-including model load), so Colab is unnecessary.
+(the checkpoints predate that default). Measured: 267 s for 100 images at 512 px (≈ 2.7
+s/image including model load), so Colab is unnecessary.
 
 **Fairness choices.**
 
@@ -209,21 +209,44 @@ including model load), so Colab is unnecessary.
 * **Fine-tuned rows** appear only when both the denoise and inpaint checkpoints exist (a
   half fine-tuned row would be mislabelled).
 
-**Smoke test (first 8 test images, seed 521, zero-shot; no fine-tuned checkpoints yet).**
+**Zero-shot results (interim; fine-tuned rows pending).** First 100 test images, seed 521.
+These rows are final; the fine-tuned rows will be added beside them. Mean ± std over
+images; 2 h 24 min on MPS for the two SD rows.
 
-| Method | PSNR | SSIM | LPIPS ↓ | hole PSNR | s/image (MPS) |
+| Method | PSNR | SSIM | LPIPS ↓ | hole PSNR | s/image |
 |---|---|---|---|---|---|
-| classical (NLM → Telea), GT mask | 25.72 | 0.622 | 0.473 | 23.12 | 0.3 |
-| ours zero-shot, GT mask | 27.38 | 0.781 | 0.259 | 20.76 | 40.6 |
-| ours zero-shot, auto mask | 16.43 | 0.722 | 0.415 | 5.72 | 42.9 |
-| BOPBtL | 16.09 | 0.663 | 0.408 | 6.42 | ≈ 3 (CPU, offline) |
+| classical (NLM → Telea), GT mask | 26.45 ± 5.13 | 0.711 | 0.443 | 21.82 | 0.17 (MPS) |
+| ours zero-shot, GT mask | 28.25 ± 5.85 | 0.786 | 0.270 | 21.70 | 42.3 (MPS) |
+| ours zero-shot, auto mask | 18.53 ± 7.11 | 0.731 | 0.430 | 8.40 | 44.1 (MPS) |
+| BOPBtL | 17.29 ± 5.81 | 0.658 | 0.456 | 8.91 | ≈ 2.7 (CPU, offline) |
 
-With 8 images these numbers are only a plumbing check. The pattern is still clear: with
-auto masks, both pipelines leave most damage in place, so **the fair comparison mostly
-measures scratch detection**. BOPBtL's detector (run on a 256 px-short-side copy) finds
-thin procedural scratches on 3 of 4 images (recall 0.59–0.84, 0 on the fourth) against
-0.27–0.34 for our `detect_scratches`. Neither finds the large NVIDIA holes (recall
-≤ 0.19), since neither was built for blobs. Report this task **per `mask_type`**.
+By `mask_type` (PSNR / LPIPS ↓; 50 images each):
+
+| Method | procedural | NVIDIA |
+|---|---|---|
+| classical, GT mask | 29.60 / 0.381 | 23.30 / 0.504 |
+| ours, GT mask | 31.85 / 0.223 | 24.66 / 0.317 |
+| ours, auto mask | 23.76 / 0.344 | 13.30 / 0.516 |
+| BOPBtL | 21.75 / 0.367 | 12.83 / 0.544 |
+
+Ours (auto mask) − BOPBtL, paired bootstrap (5,000 resamples, 95% CI): PSNR +1.24 dB
+[0.66, 1.97], better on 73/100 images; SSIM +0.073 [0.064, 0.083], 93/100; LPIPS −0.025
+[−0.038, −0.013], 66/100. So off the shelf, with neither trained on our data, our
+pipeline slightly but significantly beats BOPBtL on every whole-image metric, while
+BOPBtL is a little ahead inside the holes. The degradations are our own synthetic ones,
+and real damaged prints are untested.
+
+With auto masks, both pipelines leave most damage in place (≈ 10 dB below the GT-mask
+row), so **the fair comparison mostly measures scratch detection**. On the first 8
+images, BOPBtL's detector (run on a 256 px-short-side copy) found thin procedural
+scratches on 3 of 4 images (recall 0.59–0.84, 0 on the fourth) against 0.27–0.34 for our
+`detect_scratches`. Neither finds the large NVIDIA holes (recall ≤ 0.19; both score
+≈ 13 dB there), since neither was built for blobs. Fine-tuning does not touch
+`detect_scratches`, so this bottleneck should survive it. Report this task **per
+`mask_type`**.
+
+The overall comparison (fine-tuned ours vs BOPBtL, and where any margin comes from) is
+left until the fine-tuned rows exist.
 
 **Handoff.** One person (Sean, on the Mac) runs the whole chain: export, then BOPBtL, then
 `evaluate.py`, all with the same `--limit`/`--inpaint-limit` and `--seed`, so the loader's
